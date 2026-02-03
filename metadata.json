@@ -1,0 +1,5 @@
+{
+  "name": "ClassMatch - Compétition de Classe",
+  "description": "Une plateforme EdTech interactive pour des compétitions en classe avec scoring dynamique, bonus de vitesse et leaderboard en temps réel.",
+  "requestFramePermissions": []
+}
