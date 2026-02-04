@@ -124,6 +124,10 @@ export interface Translation {
   questionNum: string;
   deleteQuestion: string;
   globalScore: string;
+  sortByPoints: string;
+  sortBySuccess: string;
+  details: string;
+  close: string;
 }
 
 export const LANGUAGES: Record<string, Translation> = {
@@ -151,7 +155,7 @@ export const LANGUAGES: Record<string, Translation> = {
     finishSession: "Clôturer la séance",
     classManagement: "Gestion de la Classe",
     importStudents: "Saisie : Nom, Téléphone (ou juste Téléphone)",
-    studentDetails: "Détails par élève",
+    studentDetails: "Suivi des élèves (cliquez pour détails)",
     answered: "Terminé",
     thinking: "En cours...",
     notConnected: "Absent",
@@ -192,7 +196,11 @@ export const LANGUAGES: Record<string, Translation> = {
     addQuestion: "Ajouter une Question",
     questionNum: "Question {num}",
     deleteQuestion: "Supprimer Question",
-    globalScore: "Score Global"
+    globalScore: "Score Global",
+    sortByPoints: "Trier par Points",
+    sortBySuccess: "Trier par % Réussite",
+    details: "Détails",
+    close: "Fermer"
   },
   ar: {
     title: "كلاس ماتش",
@@ -259,6 +267,10 @@ export const LANGUAGES: Record<string, Translation> = {
     addQuestion: "إضافة سؤال",
     questionNum: "سؤال {num}",
     deleteQuestion: "حذف السؤال",
-    globalScore: "النتيجة الإجمالية"
+    globalScore: "النتيجة الإجمالية",
+    sortByPoints: "ترتيب حسب النقاط",
+    sortBySuccess: "ترتيب حسب النسبة %",
+    details: "تفاصيل",
+    close: "أغلق"
   }
 };

@@ -16,7 +16,6 @@ interface Props {
 }
 
 const TeacherView: React.FC<Props> = ({ state, updateState, t, lang, onReset, onExit }) => {
-  // We now manage a list of questions being created
   const [pendingQuestions, setPendingQuestions] = useState<QuestionItem[]>([
     {
       id: 'q1',
@@ -34,6 +33,7 @@ const TeacherView: React.FC<Props> = ({ state, updateState, t, lang, onReset, on
   const [studentListText, setStudentListText] = useState(state.studentList.map(s => s.name === s.phone ? s.phone : `${s.name}, ${s.phone}`).join('\n'));
   const [showConfig, setShowConfig] = useState(false);
   const [showGuide, setShowGuide] = useState(false);
+  const [expandedStudent, setExpandedStudent] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // --- Question Management ---
@@ -118,16 +118,38 @@ const TeacherView: React.FC<Props> = ({ state, updateState, t, lang, onReset, on
     const file = e.target.files?.[0];
     if (!file) return;
 
+    // Basic file extension check
+    if (!file.name.match(/\.(xlsx|xls)$/)) {
+        alert(lang === 'fr' ? "Format de fichier invalide. Veuillez sélectionner un fichier .xlsx." : "Invalid file format. Please upload an .xlsx file.");
+        return;
+    }
+
     const reader = new FileReader();
+    
+    reader.onerror = () => {
+        alert(lang === 'fr' ? "Erreur lors de la lecture du fichier." : "Error reading file.");
+    };
+
     reader.onload = (evt) => {
       try {
         const bstr = evt.target?.result;
         // @ts-ignore
+        if (typeof XLSX === 'undefined') {
+             throw new Error("Library XLSX not loaded");
+        }
+        // @ts-ignore
         const wb = XLSX.read(bstr, { type: 'binary' });
+        
+        if (!wb.SheetNames.length) throw new Error("No sheets found");
+        
         const ws = wb.Sheets[wb.SheetNames[0]];
         // @ts-ignore
         const data = XLSX.utils.sheet_to_json(ws, { header: 1 });
         
+        if (!data || data.length === 0) {
+            throw new Error("Empty sheet");
+        }
+
         const students: StudentInfo[] = data
           .map((row: any) => {
              // Prioritize phone numbers if only one column or second column empty
@@ -143,10 +165,16 @@ const TeacherView: React.FC<Props> = ({ state, updateState, t, lang, onReset, on
           })
           .filter((s: StudentInfo) => s.name && s.name.length > 1);
         
+        if (students.length === 0) {
+            alert(lang === 'fr' ? "Aucun élève valide trouvé. Vérifiez le format (Nom, Téléphone)." : "No valid students found.");
+            return;
+        }
+
         setStudentListText(students.map(s => s.name === s.phone ? s.phone : `${s.name}, ${s.phone}`).join('\n'));
-        alert(`${students.length} élèves importés.`);
+        alert(lang === 'fr' ? `${students.length} élèves importés avec succès !` : `${students.length} students imported successfully!`);
       } catch (err) {
-        alert("Erreur Excel.");
+        console.error("Excel Import Error:", err);
+        alert(lang === 'fr' ? "Erreur d'analyse du fichier Excel. Vérifiez le format." : "Error parsing Excel file. Check the format.");
       }
     };
     reader.readAsBinaryString(file);
@@ -224,57 +252,92 @@ const TeacherView: React.FC<Props> = ({ state, updateState, t, lang, onReset, on
               const isConnected = state.players.includes(student.name);
               const isPhoneOnly = student.name === student.phone;
               const displayName = resp?.displayName ? `${resp.displayName} ${isPhoneOnly ? '' : `(${student.name})`}` : (isPhoneOnly ? '...' : student.name);
-              
+              const isExpanded = expandedStudent === student.name;
+
               return (
-                <tr key={student.name} className={`transition group hover:bg-white/5 ${resp ? 'bg-emerald-500/5' : ''}`}>
-                  <td className="py-4 px-4 flex items-center space-x-3">
-                    <div className={`w-2.5 h-2.5 rounded-full ${isConnected ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-white/10'}`}></div>
-                    <div className="flex flex-col">
-                      <span>{displayName}</span>
-                    </div>
-                  </td>
-                  <td className="py-4 px-4 text-center">
-                    <span className="text-white/40 text-xs font-mono">{student.phone || '-'}</span>
-                  </td>
-                  <td className="py-4 px-4 text-center">
-                    {resp ? (
-                      <span className="text-emerald-400 uppercase text-[10px] tracking-widest font-black">✅ {t.answered}</span>
-                    ) : isConnected ? (
-                      <span className="text-amber-400 animate-pulse text-[10px] uppercase tracking-widest font-black">✍️ {t.thinking}</span>
-                    ) : (
-                      <span className="text-white/10 text-[10px] uppercase tracking-widest font-black">💤 {t.notConnected}</span>
-                    )}
-                  </td>
-                  <td className="py-4 px-4 text-right">
-                    {resp ? (
-                      <span className="text-indigo-400 font-black text-lg">
-                        {resp.totalPoints} <span className="text-[10px] opacity-40">({resp.score}%)</span>
-                      </span>
-                    ) : '-'}
-                  </td>
-                  <td className="py-4 px-4 text-right">
-                    <div className="flex justify-end space-x-2">
-                      {!isConnected && student.phone && (
-                        <button 
-                          onClick={() => inviteIndividual(student)}
-                          className="w-8 h-8 rounded-lg bg-indigo-500/10 text-indigo-400 flex items-center justify-center hover:bg-indigo-600 hover:text-white transition"
-                          title={t.inviteIndividual}
-                        >
-                          📩
-                        </button>
+                <React.Fragment key={student.name}>
+                  <tr 
+                    onClick={() => setExpandedStudent(isExpanded ? null : student.name)}
+                    className={`transition group hover:bg-white/5 cursor-pointer ${resp ? 'bg-emerald-500/5' : ''} ${isExpanded ? 'bg-white/10' : ''}`}
+                  >
+                    <td className="py-4 px-4 flex items-center space-x-3">
+                      <div className={`w-2.5 h-2.5 rounded-full ${isConnected ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-white/10'}`}></div>
+                      <div className="flex flex-col">
+                        <span>{displayName}</span>
+                        {resp && <span className="text-[10px] text-white/40 font-normal uppercase tracking-wide">Click to expand</span>}
+                      </div>
+                    </td>
+                    <td className="py-4 px-4 text-center">
+                      <span className="text-white/40 text-xs font-mono">{student.phone || '-'}</span>
+                    </td>
+                    <td className="py-4 px-4 text-center">
+                      {resp ? (
+                        <span className="text-emerald-400 uppercase text-[10px] tracking-widest font-black">✅ {t.answered}</span>
+                      ) : isConnected ? (
+                        <span className="text-amber-400 animate-pulse text-[10px] uppercase tracking-widest font-black">✍️ {t.thinking}</span>
+                      ) : (
+                        <span className="text-white/10 text-[10px] uppercase tracking-widest font-black">💤 {t.notConnected}</span>
                       )}
-                      {student.phone && (
-                        <button 
-                          onClick={() => openWhatsApp(student.name, student.phone)}
-                          className="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-400 flex items-center justify-center hover:bg-emerald-600 hover:text-white transition"
-                          title="Contact WhatsApp"
-                        >
-                          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.414 0 .018 5.394 0 12.03c0 2.12.54 4.188 1.583 6.033L0 24l6.105-1.602a11.83 11.83 0 005.937 1.606h.005c6.632 0 12.028-5.394 12.03-12.03a11.85 11.85 0 00-3.527-8.503z"/></svg>
-                        </button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
+                    </td>
+                    <td className="py-4 px-4 text-right">
+                      {resp ? (
+                        <span className="text-indigo-400 font-black text-lg">
+                          {resp.totalPoints} <span className="text-[10px] opacity-40">({resp.score}%)</span>
+                        </span>
+                      ) : '-'}
+                    </td>
+                    <td className="py-4 px-4 text-right">
+                      <div className="flex justify-end space-x-2" onClick={(e) => e.stopPropagation()}>
+                        {!isConnected && student.phone && (
+                          <button 
+                            onClick={() => inviteIndividual(student)}
+                            className="w-8 h-8 rounded-lg bg-indigo-500/10 text-indigo-400 flex items-center justify-center hover:bg-indigo-600 hover:text-white transition"
+                            title={t.inviteIndividual}
+                          >
+                            📩
+                          </button>
+                        )}
+                        {student.phone && (
+                          <button 
+                            onClick={() => openWhatsApp(student.name, student.phone)}
+                            className="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-400 flex items-center justify-center hover:bg-emerald-600 hover:text-white transition"
+                            title="Contact WhatsApp"
+                          >
+                            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.414 0 .018 5.394 0 12.03c0 2.12.54 4.188 1.583 6.033L0 24l6.105-1.602a11.83 11.83 0 005.937 1.606h.005c6.632 0 12.028-5.394 12.03-12.03a11.85 11.85 0 00-3.527-8.503z"/></svg>
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                  {isExpanded && resp && (
+                    <tr className="bg-black/20 animate-fade-in border-b border-white/5">
+                      <td colSpan={5} className="p-4">
+                        <div className="grid gap-2 text-xs">
+                          {Object.entries(resp.itemDetails).map(([itemId, detail], i) => {
+                             // Attempt to find the question text if currentQuestion is still relevant, otherwise just index
+                             const qItem = state.currentQuestion?.items.find(q => q.id === itemId);
+                             return (
+                               <div key={itemId} className="flex justify-between items-center bg-white/5 p-2 rounded">
+                                 <span className="font-bold text-white/50 w-1/3 truncate">{qItem ? qItem.text : `Question ${i + 1}`}</span>
+                                 <div className="flex-1 px-4 text-indigo-300 font-mono">
+                                    {detail.textAnswer 
+                                      ? `"${detail.textAnswer}"` 
+                                      : detail.textAnswers 
+                                        ? detail.textAnswers.join(', ')
+                                        : (detail.selectedOptionIds && detail.selectedOptionIds.length > 0)
+                                          ? `${detail.selectedOptionIds.length} option(s)`
+                                          : '-'
+                                    }
+                                 </div>
+                                 <span className={detail.score === 100 ? 'text-emerald-400 font-bold' : 'text-rose-400 font-bold'}>{detail.score}%</span>
+                               </div>
+                             );
+                          })}
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </React.Fragment>
               );
             })}
           </tbody>
@@ -287,7 +350,7 @@ const TeacherView: React.FC<Props> = ({ state, updateState, t, lang, onReset, on
     return <Podium state={state} t={t} onRestart={onReset} />;
   }
 
-  const QuestionBlock = ({ q, index }: { q: QuestionItem, index: number }) => (
+  const QuestionBlock: React.FC<{ q: QuestionItem, index: number }> = ({ q, index }) => (
     <div className="glass p-6 rounded-3xl border border-white/10 mb-6 relative animate-fade-in">
       <div className="flex justify-between items-center mb-4">
         <h4 className="text-white/50 font-black uppercase text-xs tracking-widest">{t.questionNum.replace('{num}', (index + 1).toString())}</h4>
@@ -379,7 +442,7 @@ const TeacherView: React.FC<Props> = ({ state, updateState, t, lang, onReset, on
            <button onClick={() => setShowGuide(true)} className="px-5 py-2.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 font-bold transition flex items-center space-x-2">
              <span>📖</span> <span>{t.userGuide}</span>
            </button>
-           <button onClick={() => setShowConfig(!showConfig)} className="px-5 py-2.5 rounded-xl bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 font-bold transition flex items-center space-x-2">
+           <button onClick={() => setShowConfig(!showConfig)} className={`px-5 py-2.5 rounded-xl font-bold transition flex items-center space-x-2 ${showConfig ? 'bg-indigo-600 text-white shadow-lg' : 'bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300'}`}>
              <span>👥</span> <span>{t.classManagement}</span>
            </button>
            <button onClick={onReset} className="bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 px-5 py-2.5 rounded-xl font-bold transition flex items-center space-x-2">

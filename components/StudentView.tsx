@@ -361,7 +361,7 @@ const StudentView: React.FC<Props> = ({ state, updateState, t, lang, pseudo, onJ
           {lastResult && Object.keys(lastResult.itemDetails).length > 0 && (
              <div className="grid gap-3 mb-10 text-left max-w-sm mx-auto">
                 <h4 className="text-center text-xs uppercase font-bold text-white/40 tracking-widest mb-2">Détails des scores</h4>
-                {Object.values(lastResult.itemDetails).map((detail, idx) => (
+                {Object.values(lastResult.itemDetails).map((detail: ResponseRecord['itemDetails'][string], idx) => (
                    <div key={idx} className="flex justify-between items-center bg-white/5 p-4 rounded-xl border border-white/5">
                       <span className="text-sm font-bold text-white/60 uppercase">Question {idx + 1}</span>
                       <div className="flex items-center space-x-2">
